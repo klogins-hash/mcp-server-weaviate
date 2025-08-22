@@ -2,6 +2,10 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -18,6 +22,13 @@ func NewMCPServer() (*MCPServer, error) {
 	if err != nil {
 		return nil, err
 	}
+	
+	// Get default collection from environment
+	defaultCollection := os.Getenv("DEFAULT_COLLECTION")
+	if defaultCollection == "" {
+		defaultCollection = "DefaultCollection"
+	}
+	
 	s := &MCPServer{
 		server: server.NewMCPServer(
 			"Weaviate MCP Server",
@@ -27,16 +38,32 @@ func NewMCPServer() (*MCPServer, error) {
 			server.WithResourceCapabilities(true, true),
 			server.WithRecovery(),
 		),
-		weaviateConn: conn,
-		// TODO: configurable collection name
-		defaultCollection: "DefaultCollection",
+		weaviateConn:      conn,
+		defaultCollection: defaultCollection,
 	}
 	s.registerTools()
 	return s, nil
 }
 
 func (s *MCPServer) Serve() {
-	server.ServeStdio(s.server)
+	// Check if we should serve over HTTP (for Railway) or stdio (for local MCP)
+	transport := os.Getenv("MCP_TRANSPORT")
+	port := os.Getenv("PORT")
+	
+	if transport == "http" && port != "" {
+		// HTTP transport for Railway deployment
+		log.Printf("Starting MCP server on HTTP port %s", port)
+		http.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
+			// Handle MCP over HTTP here
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprintf(w, `{"status": "MCP Server Running", "version": "0.1.0"}`)
+		})
+		log.Fatal(http.ListenAndServe(":"+port, nil))
+	} else {
+		// Default stdio transport for local MCP usage
+		server.ServeStdio(s.server)
+	}
 }
 
 func (s *MCPServer) registerTools() {

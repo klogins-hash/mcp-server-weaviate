@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/weaviate/weaviate-go-client/v4/weaviate"
+	"github.com/weaviate/weaviate-go-client/v4/weaviate/auth"
 	"github.com/weaviate/weaviate-go-client/v4/weaviate/graphql"
 	"github.com/weaviate/weaviate/entities/models"
 )
@@ -17,12 +19,30 @@ type WeaviateConnection struct {
 }
 
 func NewWeaviateConnection() (*WeaviateConnection, error) {
-	// TODO: get config from env
-	client, err := weaviate.NewClient(weaviate.Config{
-		Host:           "localhost:8080",
-		Scheme:         "http",
-		StartupTimeout: time.Second,
-	})
+	// Get configuration from environment variables
+	host := os.Getenv("WEAVIATE_HOST")
+	if host == "" {
+		host = "localhost:8080" // fallback for local development
+	}
+	
+	scheme := os.Getenv("WEAVIATE_SCHEME")
+	if scheme == "" {
+		scheme = "http"
+	}
+	
+	config := weaviate.Config{
+		Host:           host,
+		Scheme:         scheme,
+		StartupTimeout: 30 * time.Second,
+	}
+	
+	// Add API key authentication if provided
+	apiKey := os.Getenv("WEAVIATE_API_KEY")
+	if apiKey != "" {
+		config.AuthConfig = auth.ApiKey{Value: apiKey}
+	}
+	
+	client, err := weaviate.NewClient(config)
 	if err != nil {
 		return nil, fmt.Errorf("connect to weaviate: %w", err)
 	}
